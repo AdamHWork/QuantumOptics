@@ -1,0 +1,30 @@
+# ── Virtual Environment ──────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Python Cache ─────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── VSCode Settings ───────────────────────────────────
+# Comment out the next line if you want to share your
+# VSCode interpreter settings with collaborators
+.vscode/
+
+# ── OS Files ─────────────────────────────────────────
+.DS_Store           # Mac
+Thumbs.db           # Windows
+
+# ── Output Files ─────────────────────────────────────
+# Comment out if you WANT to commit generated PNGs
+#*.png
+
+# ── Jupyter ───────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Pyenv ─────────────────────────────────────────────
+.python-version
