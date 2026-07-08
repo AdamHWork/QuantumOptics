@@ -23,6 +23,7 @@ SIMULATIONS = {
     # "boson_sampling" : BosonSampling,
 }
 
+
 def main():
     # Default to michelson if no argument given
     name = sys.argv[1] if len(sys.argv) > 1 else "michelson"
@@ -35,11 +36,11 @@ def main():
     # ── Configure ─────────────────────────────────────────────
     # Edit these values to change simulation parameters
     config = SimulationConfig(
-        n_phases = 200,
-        n_shots  = 500,
-        phi_1    = 0.0,
-        cutoff   = 3,
-        backend  = "fock"
+        n_phases=200,
+        n_shots=500,
+        phi_1=0.0,
+        cutoff=3,
+        backend="fock"
     )
 
     # ── Run ───────────────────────────────────────────────────
@@ -47,6 +48,7 @@ def main():
     sim.run()
     sim.plot()
     sim.summarise()
+
 
 if __name__ == "__main__":
     main()

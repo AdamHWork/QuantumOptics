@@ -31,11 +31,11 @@ class SimulationConfig:
     cutoff    : Fock space Hilbert space truncation dimension
     backend   : Strawberry Fields backend to use
     """
-    n_phases : int   = 200
-    n_shots  : int   = 500
-    phi_1    : float = 0.0
-    cutoff   : int   = 3
-    backend  : str   = "fock"
+    n_phases: int = 200
+    n_shots: int = 500
+    phi_1: float = 0.0
+    cutoff: int = 3
+    backend: str = "fock"
 
 
 class QuantumSimulation(ABC):
@@ -165,4 +165,5 @@ class QuantumSimulation(ABC):
             The current phase index (0-based).
         """
         if (idx + 1) % 20 == 0:
-            print(f"  Progress: {idx + 1}/{self.config.n_phases} phase points done.")
+            print(
+                f"  Progress: {idx + 1}/{self.config.n_phases} phase points done.")

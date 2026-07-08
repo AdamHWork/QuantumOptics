@@ -14,18 +14,16 @@ Physics:
   P_port1 = sin²(Δφ/2)   — destructive interference
 """
 
+from base.plotter import InterferencePlotter
+from base.simulation import QuantumSimulation, SimulationConfig
+from strawberryfields.ops import Fock, BSgate, Rgate, MeasureFock
+import strawberryfields as sf
 import sys
 import os
 import numpy as np
 
 # Allow imports from the project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import strawberryfields as sf
-from strawberryfields.ops import Fock, BSgate, Rgate, MeasureFock
-
-from base.simulation import QuantumSimulation, SimulationConfig
-from base.plotter import InterferencePlotter
 
 
 class MichelsonInterferometer(QuantumSimulation):
@@ -92,7 +90,7 @@ class MichelsonInterferometer(QuantumSimulation):
             # Mode 0: fixed reference arm (φ_1)
             # Mode 1: swept movable arm (φ_2)
             Rgate(self.config.phi_1) | q[0]
-            Rgate(phi_2)             | q[1]
+            Rgate(phi_2) | q[1]
 
             # ── Beamsplitter — Recombination ───────────────
             # Interference occurs here. Δφ determines whether
@@ -101,54 +99,42 @@ class MichelsonInterferometer(QuantumSimulation):
 
             # ── Measurement ───────────────────────────────
             # Collapse to photon number — always (1,0) or (0,1)
-            MeasureFock() | q[0]
             MeasureFock() | q[1]
+            MeasureFock() | q[0]
 
         return prog
 
     def run(self):
-        """
-        Execute the full phase sweep.
 
-        For each phase value in phi_range:
-          1. Run N_SHOTS independent quantum circuits
-          2. Count detections at each port
-          3. Normalise to empirical probabilities
-
-        Populates self.results with:
-          'prob_port0' : np.ndarray of shape (n_phases,)
-          'prob_port1' : np.ndarray of shape (n_phases,)
-        """
-        prob_port0 = np.zeros(self.config.n_phases)
-        prob_port1 = np.zeros(self.config.n_phases)
+        # Name these according to physical behaviour, not mode number
+        # Under SF's BSgate convention, mode 1 is constructive
+        prob_constructive = np.zeros(self.config.n_phases)
+        prob_destructive = np.zeros(self.config.n_phases)
 
         for idx, phi_2 in enumerate(self.phi_range):
 
-            count_port0 = 0
-            count_port1 = 0
+            count_constructive = 0
+            count_destructive = 0
 
             for _ in range(self.config.n_shots):
-                # Build and run the circuit for this phase
-                prog   = self.build_circuit(phi_2)
+                prog = self.build_circuit(phi_2)
                 result = self._run_circuit(prog)
 
-                # Read photon counts at each port
-                m0 = result.samples[0][0]
-                m1 = result.samples[0][1]
+                m0, m1 = result.samples[0]
 
-                count_port0 += int(m0 == 1)
-                count_port1 += int(m1 == 1)
+                # m1 = constructive port under SF BSgate convention
+                # m0 = destructive port under SF BSgate convention
+                count_constructive += int(m1 == 1)
+                count_destructive += int(m0 == 1)
 
-            # Normalise counts → probabilities
-            prob_port0[idx] = count_port0 / self.config.n_shots
-            prob_port1[idx] = count_port1 / self.config.n_shots
+            prob_constructive[idx] = count_constructive / self.config.n_shots
+            prob_destructive[idx] = count_destructive / self.config.n_shots
 
             self._report_progress(idx)
 
-        # Store results as instance attributes for
-        # access by plot() and summarise()
-        self.results["prob_port0"] = prob_port0
-        self.results["prob_port1"] = prob_port1
+        # Store with physically meaningful keys
+        self.results["prob_port0"] = prob_constructive   # cos² port
+        self.results["prob_port1"] = prob_destructive    # sin² port
 
         print("\nSimulation complete. Generating plots...\n")
         return self
@@ -161,7 +147,7 @@ class MichelsonInterferometer(QuantumSimulation):
         Overlays simulated dots on analytical theory curves
         for both output ports across the full phase sweep.
         """
-        delta_phi    = self.phi_range - self.config.phi_1
+        delta_phi = self.phi_range - self.config.phi_1
         theory_port0 = np.cos(delta_phi / 2) ** 2
         theory_port1 = np.sin(delta_phi / 2) ** 2
 
@@ -176,11 +162,11 @@ class MichelsonInterferometer(QuantumSimulation):
         )
 
         plotter.plot(
-            phi_range    = self.phi_range,
-            prob_port0   = self.results["prob_port0"],
-            prob_port1   = self.results["prob_port1"],
-            theory_port0 = theory_port0,
-            theory_port1 = theory_port1,
+            phi_range=self.phi_range,
+            prob_port0=self.results["prob_port0"],
+            prob_port1=self.results["prob_port1"],
+            theory_port0=theory_port0,
+            theory_port1=theory_port1,
         )
 
     def summarise(self):

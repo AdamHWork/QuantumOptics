@@ -25,22 +25,22 @@ class InterferencePlotter:
     """
 
     def __init__(self, title: str, save_path: str):
-        self.title     = title
+        self.title = title
         self.save_path = save_path
 
     def plot(
         self,
-        phi_range   : np.ndarray,
-        prob_port0  : np.ndarray,
-        prob_port1  : np.ndarray,
+        phi_range: np.ndarray,
+        prob_port0: np.ndarray,
+        prob_port1: np.ndarray,
         theory_port0: np.ndarray,
         theory_port1: np.ndarray,
-        label0      : str = "Port 0",
-        label1      : str = "Port 1",
+        label0: str = "Port 0",
+        label1: str = "Port 1",
         theory_label0: str = r"Theory: $\cos^2(\Delta\phi/2)$",
         theory_label1: str = r"Theory: $\sin^2(\Delta\phi/2)$",
-        subtitle0   : str = "Port 0 — Constructive Interference Arm",
-        subtitle1   : str = "Port 1 — Destructive Interference Arm",
+        subtitle0: str = "Port 0 — Constructive Interference Arm",
+        subtitle1: str = "Port 1 — Destructive Interference Arm",
     ):
         """
         Generate, save, and display the interference fringe plot.
