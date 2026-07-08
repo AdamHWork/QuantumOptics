@@ -147,9 +147,7 @@ for idx, phi_2 in enumerate(PHI_RANGE):
             # superposition across both arms simultaneously:
             #
             #   |ψ⟩ = (1/√2)(|1⟩₀|0⟩₁ + i|0⟩₀|1⟩₁)
-            #
-            # This is purely quantum — the photon does not "choose"
-            # an arm. It genuinely exists in both arms at once.
+
 
             BSgate(np.pi / 4, 0.0) | (q[0], q[1])
 
