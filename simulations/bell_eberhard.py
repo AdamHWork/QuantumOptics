@@ -60,7 +60,7 @@ import strawberryfields as sf
 from strawberryfields.ops import S2gate, BSgate, Fock, LossChannel
 from thewalrus.fock_gradients import displacement as _displacement_tw
 
-FOCK_CUTOFF = 7
+FOCK_CUTOFF = 12
 
 
 # ══════════════════════════════════════════════════════════════════════════════
