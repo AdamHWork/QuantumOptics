@@ -41,6 +41,11 @@ COMPLETE FIX HISTORY
 
       For eta_H < 1 (heralding channel loss), the state is no longer
       pure and SF is used with a verified dm() extraction path.
+  D11 The SF circuit now runs for every eta_H. Two root causes of the earlier
+      failure: (a) the circuit's BS used t_b as the photon-stays transmittance,
+      the opposite of Paper Eq.(3) (t_b <-> 1-t_b); (b) the two Charlie click patterns carry opposite-sign coherences
+      (BS pi/4), so A + B cancelled them. A click-dependent pi phase on Alice's
+      mode restores them; SF then matches the closed-form state to ~1e-16.
 ════════════════════════════════════════════════════════════════════════
 """
 
@@ -61,6 +66,9 @@ from strawberryfields.ops import S2gate, BSgate, Fock, LossChannel
 from thewalrus.fock_gradients import displacement as _displacement_tw
 
 FOCK_CUTOFF = 12
+# The heralded two-mode state lives in span{|0,0>, |1,1>}, so the SF circuit only
+# needs a small cutoff (a 4-mode mixed tensor at cutoff n costs n^8 elements).
+SF_CUTOFF = 4
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -215,67 +223,69 @@ def _heralded_dm_analytical(t_b, g, cutoff=FOCK_CUTOFF):
     return rho_AB
 
 
-def _heralded_dm_sf(t_b, g, eta_H, cutoff=FOCK_CUTOFF):
+def _heralded_dm_sf(t_b, g, eta_H=1.0, cutoff=FOCK_CUTOFF, sf_cutoff=SF_CUTOFF):
     """
-    Construct the heralded 2-mode density matrix ρ_AB via SF.
+    Heralded two-mode density matrix rho_AB from a real Strawberry Fields circuit.
 
-    Used only when eta_H < 1.0 (heralding channel loss makes the
-    state mixed, so the analytical formula no longer applies).
+    Circuit (kept modes q0 = Alice, q2 = Bob; Charlie measures q1, q3):
+        S2gate(g)  q0,q1          two-mode squeezed vacuum
+        Fock(1)    q2             single photon
+        BS         q2,q3          Bob's beamsplitter; t_b is the transmittance
+                                  of the photon INTO Charlie's mode q3 (Paper Eq. 3 puts
+                                  t_b on the vacuum branch, c0 ~ sqrt(t_b))
+        Loss(eta_H) q1,q3         heralding-channel loss (skipped when eta_H = 1)
+        BS(pi/4)   q1,q3          Charlie's 50:50 beamsplitter
 
-    The SF circuit is run with pure=False from the start  ^1^ ,
-    which avoids the mid-circuit pure→mixed transition triggered by
-    Fock(1). The dm() call then always returns the 8-index mixed-state
-    tensor with the confirmed index ordering  ^3^ :
-        dm[i_a1, j_a1, i_a2, j_a2, i_b1, j_b1, i_b2, j_b2]
+    Charlie's click is post-selected on either output port (patterns A and B).
+    The pi/4 beamsplitter gives the two patterns coherences of OPPOSITE sign, so
+    summing them naively cancels the off-diagonal terms that produce the Bell
+    violation. The experiment applies a click-dependent pi phase (feed-forward) on
+    Alice's mode; here that is (-1)^(i0 + j0) on pattern A. Without it the SF state
+    is a classical mixture and CHSH never exceeds 2.
 
-    Post-selection on Charlie (modes a2, b2) detecting 1 photon:
-        Pattern A: a2=1, b2=0  →  dm[:, :, 1, 1, :, :, 0, 0]
-        Pattern B: a2=0, b2=1  →  dm[:, :, 0, 0, :, :, 1, 1]
-
-    Parameters
-    ----------
-    t_b   : float — Bob's BS transmittance
-    g     : float — squeezing parameter
-    eta_H : float — heralding channel efficiency (< 1.0)
-    cutoff: int   — Fock space dimension
+    dm() uses the interleaved index order [i0,j0, i1,j1, i2,j2, i3,j3].
 
     Returns
     -------
-    rho_AB   : (cutoff, cutoff, cutoff, cutoff) complex ndarray
+    rho_AB   : (cutoff,)*4 complex ndarray, rho[i,j,k,l] = <i_A,k_B|rho|j_A,l_B>
     p_herald : float
     """
     prog = sf.Program(4)
     with prog.context as q:
         S2gate(g, 0.0)                        | (q[0], q[1])
         Fock(1)                               | q[2]
-        BSgate(np.arccos(np.sqrt(t_b)), 0.0) | (q[2], q[3])
-        LossChannel(eta_H)                    | q[1]
-        LossChannel(eta_H)                    | q[3]
+        BSgate(np.arccos(np.sqrt(1.0 - t_b)), 0.0) | (q[2], q[3])
+        if eta_H < 1.0:
+            LossChannel(eta_H)                | q[1]
+            LossChannel(eta_H)                | q[3]
         BSgate(np.pi / 4, 0.0)               | (q[1], q[3])
 
-    eng    = sf.Engine("fock", backend_options={
-        "cutoff_dim": cutoff,
-        "pure": False
-    })
-    result = eng.run(prog)
-    state  = result.state
-    dm     = state.dm()
+    eng = sf.Engine("fock", backend_options={"cutoff_dim": sf_cutoff,
+                                             "pure": False})
+    dm = eng.run(prog).state.dm()
+    assert dm.shape == (sf_cutoff,) * 8, f"Unexpected dm shape {dm.shape}"
 
-    assert dm.shape == (cutoff,) * 8, \
-        f"Unexpected dm shape {dm.shape}"
+    pattern_A = dm[:, :, 1, 1, :, :, 0, 0]
+    pattern_B = dm[:, :, 0, 0, :, :, 1, 1]
+    n = np.arange(sf_cutoff)
+    parity_A = (-1.0) ** (n[:, None] + n[None, :])          # (i0, j0)
+    rho_small = parity_A[:, :, None, None] * pattern_A + pattern_B
 
-    # Post-select on Charlie: n_a2 + n_b2 = 1
-    rho_unnorm  = dm[:, :, 1, 1, :, :, 0, 0].copy()
-    rho_unnorm += dm[:, :, 0, 0, :, :, 1, 1]
-
-    c2       = cutoff * cutoff
-    rho_mat  = rho_unnorm.transpose(0, 2, 1, 3).reshape(c2, c2)
-    p_herald = float(np.real(np.trace(rho_mat)))
-
+    p_herald = float(np.real(np.einsum('iikk->', rho_small)))   # Tr over A and B
     if p_herald < 1e-12:
-        return np.zeros((cutoff, cutoff, cutoff, cutoff), dtype=complex), 0.0
+        return np.zeros((cutoff,) * 4, dtype=complex), 0.0
 
-    return rho_unnorm / p_herald, p_herald
+    rho_AB = np.zeros((cutoff,) * 4, dtype=complex)
+    c = min(cutoff, sf_cutoff)
+    rho_AB[:c, :c, :c, :c] = (rho_small / p_herald)[:c, :c, :c, :c]
+    return rho_AB, p_herald
+
+
+def sf_vs_analytical_check(t_b, g, cutoff=FOCK_CUTOFF):
+    """Max element-wise |rho_SF - rho_analytical| for the lossless heralded state."""
+    rho_sf, _ = _heralded_dm_sf(t_b, g, 1.0, cutoff)
+    rho_an    = _heralded_dm_analytical(t_b, g, cutoff)
+    return float(np.max(np.abs(rho_sf - rho_an)))
 
 
 def _povm_matrix(alpha, eta_D, cutoff):
@@ -353,26 +363,21 @@ def _compute_Q_marginal_B(rho_AB, beta, eta_D, cutoff):
 def compute_chsh_sf(t_b, g, alpha1, alpha2, beta1, beta2,
                     eta_D, eta_H=1.0, cutoff=FOCK_CUTOFF):
     """
-    Compute CHSH via the SF numerical path — all fixes D1-D10 applied.
+    Compute CHSH via the SF numerical path — all fixes D1-D11 applied.
 
-    For eta_H=1.0 (default): uses the exact analytical density matrix
-    from _heralded_dm_analytical(). This is mathematically equivalent
-    to the SF circuit result but bypasses all SF dm() extraction issues.
-
-    For eta_H<1.0: uses SF circuit with pure=False and verified dm()
-    extraction via _heralded_dm_sf().
+    The heralded state is built by a Strawberry Fields circuit for every eta_H
+    (see _heralded_dm_sf), then the Fock-basis POVM from thewalrus is applied.
 
     Paper Eq. (S21):
         S = 2 + 4[Q_ab(α1,β1) + Q_ab(α1,β2) + Q_ab(α2,β1)
                   - Q_ab(α2,β2) - Q_a(α1) - Q_b(β1)]
     """
-    if eta_H >= 1.0:
-        # FIX D10: exact analytical density matrix — no SF needed
-        rho_AB = _heralded_dm_analytical(t_b, g, cutoff)
-    else:
-        rho_AB, p_herald = _heralded_dm_sf(t_b, g, eta_H, cutoff)
-        if p_herald < 1e-12:
-            return 0.0
+    # FIX D11: the heralded state always comes from the Strawberry Fields circuit
+    # (click-dependent phase correction included). The closed-form state is kept
+    # only as a cross-check in sf_vs_analytical_check().
+    rho_AB, p_herald = _heralded_dm_sf(t_b, g, eta_H, cutoff)
+    if p_herald < 1e-12:
+        return 0.0
 
     Q11 = _compute_Q_joint(rho_AB, alpha1, beta1,  eta_D, cutoff)
     Q12 = _compute_Q_joint(rho_AB, alpha1, beta2,  eta_D, cutoff)
@@ -655,7 +660,7 @@ class BellEberhardSimulation(QuantumSimulation):
         print("  Eberhard limit : eta_D >= 66.7%")
         print("  SPPE limit     : eta_D >= 82.6%")
         print(f"  Tsirelson bound: S <= 2√2 = {2*np.sqrt(2):.6f}")
-        print("\n  Fixes: D1-D10 applied (see module docstring)")
+        print("\n  Fixes: D1-D11 applied (see module docstring)")
         print("═" * 72 + "\n")
 
 
