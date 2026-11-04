@@ -25,7 +25,7 @@ A reproduction of the detection-loophole-free Bell test protocol from Alwehaibi,
 The simulation computes the CHSH parameter S as a function of detector efficiency η_D, using two independent methods that are cross-checked against each other and against the paper's published values:
 
 - **Analytical path** — derives the heralded two-mode state from the paper's closed-form expressions and evaluates the CHSH correlator directly from the Husimi Q-function (Eqs. S21–S24).
-- **Numerical path** — builds the corresponding circuit in Strawberry Fields (two-mode squeezing, beamsplitter, loss channels, Fock-basis measurement with photon-number-resolving detector model) and extracts the heralded density matrix from the simulated state.
+- **Numerical path** — builds the heralded two-mode state with a Strawberry Fields circuit (two-mode squeezing, single-photon input, beamsplitters, optional heralding loss, post-selection on Charlie's click) and evaluates the CHSH correlator with Fock-basis no-click POVMs (cutoff 12, displacement operators from The Walrus).
 
 Also computed:
 - Device-independent QKD quantities (min-entropy and Holevo bound) as functions of η_D
@@ -38,7 +38,12 @@ Run with:
 python run.py bell_eberhard
 ```
 
-**Note on η_D = 0.80**: the paper's Table SI entry at this efficiency doesn't reproduce the stated CHSH value when checked analytically (a transcription error). The code re-optimises the free parameters at runtime via Nelder-Mead to recover a consistent operating point, and flags this in the console output.
+**Results and caveats**
+
+- The Strawberry Fields circuit builds the heralded state for every η_D (including lossless heralding). It agrees with the closed-form state of Paper Eq. (3) to ~1e-16 and the resulting CHSH values agree to ~1e-15 (`sf_vs_analytical_check`).
+- Two details were needed to make the SF circuit match: Bob's beamsplitter uses t_b as the transmittance *into* Charlie's mode (Paper Eq. 3 puts t_b on the vacuum branch), and the two Charlie click patterns need a click-dependent π phase on Alice's mode, because the 50:50 beamsplitter gives them opposite-sign coherences that otherwise cancel.
+- Using the Table SI parameters as transcribed, the computed S matches the paper's quoted values for η_D ≤ 0.70, but falls short of them for η_D ≥ 0.75 (by 0.03 at η_D = 0.75, up to 0.28 at η_D = 1.0). The code re-optimises (t_b, g, α₁, α₂) at η_D = 0.80, which recovers S = 2.0888 (paper: 2.0888). Re-optimising at the other efficiencies also recovers the paper's S, but is not done by default. The most likely cause is a parameter-convention difference between the table and Eq. (3); this has not been confirmed with the paper's authors.
+- The optimum depends only on the ratio c₁/c₀, so the re-optimised (t_b, g) are not unique.
 
 ## Project structure
 
@@ -58,7 +63,7 @@ All simulations share a common `QuantumSimulation` abstract base class (`base/si
 
 ## Requirements
 
-- Python 3
+- Python 3.10–3.11 (Strawberry Fields 0.23 needs SciPy < 1.13, which has no Python 3.13 wheels)
 - [Strawberry Fields](https://strawberryfields.ai/) 0.23
 - [The Walrus](https://the-walrus.readthedocs.io/) 0.19 (used for exact Fock-basis displacement operators in the Bell-Eberhard POVM)
 - NumPy, SciPy, Matplotlib
